@@ -1,122 +1,166 @@
-## UTP
-
-<code><a href="https://github.com/umarurize/UTP"><img height="25" src="https://github.com/umarurize/UTP/blob/master/logo/UTP.png" alt="UTP" /></a>&nbsp;UTP</code>
+<code><a href="https://github.com/umarurize/UTP"><img height="25" src="./logo/UTP.png" alt="UTP" /></a>&nbsp;UTP</code>
 
 ![Total Git clones](https://img.shields.io/badge/dynamic/json?label=Total%20Git%20clones&query=$&url=https://cdn.jsdelivr.net/gh/umarurize/UTP@master/clone_count.txt&color=brightgreen)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/umarurize/UTP/total)
+![](https://img.shields.io/badge/language-python-blue.svg) 
+[![GitHub License](https://img.shields.io/github/license/umarurize/UTP)](LICENSE)
 
-### :bell:Introductions
-* **Rich features:**
+***
+
+### ✨ Introductions
+* **Rich features**
 - [x] Home
 - [x] Warp
-- [x] TPA
-- [x] TPAHere
-- [x] TPSetting
+- [x] Back
+- [x] TPA & TPAHere
 - [x] TPR
-- [x] Back (back to the last death point.)
-- [x] Home & Warp navigation (distance and yaw angle)
 - [x] Death penalty (UMoney required)
-* **Full GUI:** Beautiful GUI forms for easy operation rather than commands.
-* **Hot reload support:** Operators can edit/update `config.json` in game directly.
-* **Localized languages support**
+* **Support with full GUI forms**
+* **Support with hot reloading**
+* **Support with localized multi-languages**
 
-### :hammer:Installation
-[Optional pre-plugin] ZX_UI
+***
 
-[Required pre-plugin] [UMoney](https://github.com/umarurize/UMoney)
+### 📦 Installation
+**Tips:** *UTP is adapted to all versions of Endstone.*
 
-Put `.whl` file into the endstone plugins folder, and then start the server. Enter the command `/utp` to call out the main form.
+<details> 
+<summary>Check pre-plugins</summary>
 
-### :computer:Download
-Now, you can get the release version form this repo or <code><a href="https://www.minebbs.com/resources/utp.10159/"><img height="20" src="https://github.com/umarurize/umaru-cdn/blob/main/images/minebbs.png" alt="Minebbs" /></a>&nbsp;Minebbs</code>.
+* **Optional pre-plugins**
+  * [ZX_UI](https://www.minebbs.com/resources/zx-ui.9830/)
+  * [UMoney](https://github.com/U-Blocks/UMoney)
 
-### :file_folder:File structure
+**Tips:** *the death penalty feature will only take effect if you have UMoney installed.*
+
+</details>
+
+1. Ensure you have downloaded the correct version and installed all required pre-plugins
+2. Place the `.whl` file into your server's `plugins` folder
+3. Restart your server
+4. Enter the command `/utp` to call out the main form of UTP
+
+***
+
+### 📄 File structure
 ```
-Plugins/
+plugins/
 ├─ utp/
 │  ├─ config.json
 │  ├─ home.json
 │  ├─ warp.json
-│  ├─ tp_setting.json
+│  ├─ tpa_setting.json
 │  ├─ lang/
 │  │  ├─ zh_CN.json
 │  │  ├─ en_US.json
 ```
 
-### :pencil:Configuration
-UTP allows operators or players to edit/update relevant settings through GUI forms with ease, here are just simple explanations for these configurations.
+***
 
+### ⚙️ Configuration
 `config.json`
 ```json5
 {
-    "max_home_per_player": 10,  // the max number of homes a player can posses
-    "tpr_range": 2000,  // the max random teleportation range
-    "tpr_cool_down": 60,  // the cooldown time in seconds for calling the random teleportation
-    "tpr_protect_time": 25,  // the protection time in seconds after calling the random teleportation
-    "back_valid_time": 60,  // the valid time in seconds for calling the back
-    "navigation_valid_time": 300,  // the valid time in seconds for every single navigation
-    "death_penalty_money": 500,    // the money reduced by death penalty
-    "death_penalty_money_threshold": 10000,    // the money threshold of death penalty
-    "is_enable": {
+    "max_home": 5,  // the max num of homes allocated to each single player
+    "back_expiry_window": 30, // in seconds
+    "death_penalty_rate": 0.01,
+    /**
+    Once the death penalty feature is enabled and UMoney is installed:
+    If a player's money is 2000 and the death penalty rate is set to 0.01,
+    the player will lose 20 upon death.
+    **/
+    "tpr_range": 2000,
+    "tpr_cooldown": 60,
+    "is_enabled": {
         "home": true,
         "warp": true,
-        "tpa_and_tpahere": true,
-        "tpr": true,
         "back": true,
+        "tpa": true,
+        "tpr": true,
         "death_penalty": false
     }
+    /**
+    If set to false, the relevant feature button won't be displayed in the main form.
+    
+    The death penalty feature will only take effect if UMoney is installed.
+    
+    If UMoney isn't installed, the death penalty feature won't take effect - even if "death_penalty" is set to true.
+    **/
 }
 ```
 
 `home.json`
 ```json5
 {
-    "umaru rize": {    // Home owner
-        "test home": { // Home name
-            "loc": [    // Home coordinates
+    "umaru rize": { // player name
+        "test home": {  // home name
+            "dim": "Overworld", // home dimension
+            "loc": [  // home location
                 -285,
                 49,
                 -250
-            ],
-            "dim": "Nether"    // Home dimension
+            ]
+        },
+        "Our first home": {
+            "dim": "Nether",
+            "loc": [
+                -123,
+                29,
+                37
+            ]
         }
-    }
+    },
+    "TheDeerInDream": {}
 }
 ```
 
 `warp.json`
 ```json5
 {
-    "test warp": {    // Warp name
-        "loc": [    // Warp coordinates
-            437,
-            71,
-            249
-        ],
-        "dim": "Overworld"    // Warp dimension
+    "test warp1": {
+        "dim": "Overworld",
+        "loc": [
+            0,
+            0,
+            0
+        ]
+    },
+    "test warp2": {
+        "dim": "Nether",
+        "loc": [
+            0,
+            0, 
+            0
+        ]
     }
 }
 ```
 
-`tp_setting.json`
+`tpa_setting.json`
 ```json5
 {
-    "umaru rize": true,    // if false, TPA or TPAHere requests from other players will be blocked
-    "handaozhang520": true
+    "umaru rize": true,
+    "TheDeerInDream": false
+    /**
+    If set to false, other players won't be able to send TPA/TPAHere requests to this player.
+    **/
 }
 ```
 
-### :globe_with_meridians:Languages
+***
+
+### 🌎 Localized multi-language
+* Currently supported localized languages for UTP:
 - [x] `zh_CN`
 - [x] `en_US`
+* How to add more languages to UTP? Here we use Japanese for an example.
+  * Create a file named `ja_JP.json` and place it into `lang` folder
+  * Copy all key-value pairs from `en_US.json` and paste them into `ja_JP.json`
+  * Refer to the English values and translate them all into Japanese, then save the file.
+  * Restart your server, and you're all done!
+* If you'd like your translated language to be included as one of the official languages of this plugin, feel free to shoot over a PR.
 
-Off course you can add your mother language to UTP, just creat `XX_XX.json` (such as `ja_JP.json`) and translate value with reference to `en_US.json`.
+***
 
-You can also creat a PR to this repo to make your mother language one of the official languages of UTP.
-
-
-### :camera:Screenshots
-Due to the extreme ease of use of UTP, there is no wiki available. You can view related screenshots of UTP from images folder of this repo.
-
-![](https://img.shields.io/badge/language-python-blue.svg) [![GitHub License](https://img.shields.io/github/license/umarurize/UTP)](LICENSE)
-
+### 📷Screenshots
+You can view related screenshots of UTP from images folder of this repo.
