@@ -1,6 +1,4 @@
-![header](https://capsule-render.vercel.app/api?type=venom&height=150&color=gradient&text=UTP&fontColor=0:8871e5,100:b678c4&fontSize=50&desc=A%20de-commanded%20teleportation%20collection%20plug-in.&descAlignY=80&descSize=20&animation=fadeIn)
-
-****
+## UTP
 
 <code><a href="https://github.com/umarurize/UTP"><img height="25" src="https://github.com/umarurize/UTP/blob/master/logo/UTP.png" alt="UTP" /></a>&nbsp;UTP</code>
 
@@ -17,11 +15,16 @@
 - [x] TPR
 - [x] Back (back to the last death point.)
 - [x] Home & Warp navigation (distance and yaw angle)
+- [x] Death penalty (UMoney required)
 * **Full GUI:** Beautiful GUI forms for easy operation rather than commands.
 * **Hot reload support:** Operators can edit/update `config.json` in game directly.
 * **Localized languages support**
 
 ### :hammer:Installation
+[Optional pre-plugin] ZX_UI
+
+[Required pre-plugin] [UMoney](https://github.com/umarurize/UMoney)
+
 Put `.whl` file into the endstone plugins folder, and then start the server. Enter the command `/utp` to call out the main form.
 
 ### :computer:Download
@@ -50,14 +53,17 @@ UTP allows operators or players to edit/update relevant settings through GUI for
     "tpr_range": 2000,  // the max random teleportation range
     "tpr_cool_down": 60,  // the cooldown time in seconds for calling the random teleportation
     "tpr_protect_time": 25,  // the protection time in seconds after calling the random teleportation
-    "back_valid_time": 60  // the valid time in seconds for calling the back
-    "navigation_valid_time": 300  // the valid time in seconds for every single navigation
+    "back_valid_time": 60,  // the valid time in seconds for calling the back
+    "navigation_valid_time": 300,  // the valid time in seconds for every single navigation
+    "death_penalty_money": 500,    // the money reduced by death penalty
+    "death_penalty_money_threshold": 10000,    // the money threshold of death penalty
     "is_enable": {
         "home": true,
         "warp": true,
         "tpa_and_tpahere": true,
         "tpr": true,
-        "back": true
+        "back": true,
+        "death_penalty": false
     }
 }
 ```
