@@ -1,7 +1,13 @@
-from endstone_utp.utp import utp
-from endstone_utp.lang import load_langs
+import endstone_utp.functions
+
+from endstone_utp.main import Main
+from endstone_utp.lang import Lang
+from endstone_utp.config import Config
+
 
 __all__ = [
-    'utp',
-    'load_langs'
+    "functions",
+    "Main",
+    "Lang",
+    "Config"
 ]
