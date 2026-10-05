@@ -15,6 +15,29 @@ class TPA:
 
         self.lang_funct = main.lang_funct
 
+    @staticmethod
+    def __player_xuid(player: Player) -> str | None:
+        xuid = getattr(player, "xuid", None)
+        if not isinstance(xuid, str):
+            return None
+
+        xuid = xuid.strip()
+        return xuid or None
+
+    def __get_real_player(self, name: str, expected_xuid: str | None = None) -> Player | None:
+        player = self.main.server.get_player(name)
+        if player is None:
+            return None
+
+        xuid = self.__player_xuid(player)
+        if xuid is None:
+            return None
+
+        if expected_xuid is not None and xuid != expected_xuid:
+            return None
+
+        return player
+
     def __load_tpa_setting_data(self) -> dict:
         if not os.path.exists(self.__tpa_setting_file_path):
             with open(self.__tpa_setting_file_path, "w") as f:
@@ -34,6 +57,11 @@ class TPA:
 
     @event_handler
     def on_player_join(self, e: PlayerJoinEvent) -> None:
+        # Simulated/fake players have no authenticated XUID. They must never
+        # become TPA participants or create persistent TPA settings.
+        if self.__player_xuid(e.player) is None:
+            return
+
         if self.__tpa_setting_data.get(e.player.name) is None:
             self.__tpa_setting_data[e.player.name] = True
 
@@ -70,10 +98,9 @@ class TPA:
                   f"{self.lang_funct.get_text(player, 'tpa_setting_form.toggle.label')}",
         )
 
-        if self.__tpa_setting_data[player.name]:
-            toggle.default_value = True
-        else:
-            toggle.default_value = False
+        # Players already online when UTP is loaded may not have received a
+        # PlayerJoinEvent yet. Preserve UTP's original default-enabled policy.
+        toggle.default_value = self.__tpa_setting_data.get(player.name, True)
 
         tpa_setting_form = ModalForm(
             title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
@@ -101,17 +128,29 @@ class TPA:
         player.send_form(tpa_setting_form)
 
     def __send_request(self, player: Player) -> None:
-        player_name_list = []
+        sender_xuid = self.__player_xuid(player)
+        if sender_xuid is None:
+            return
+
+        player_targets: list[tuple[str, str]] = []
 
         for online_player in self.main.server.online_players:
-            if (
-                online_player.name != player.name
-                and
-                self.__tpa_setting_data[online_player.name]
-            ):
-                player_name_list.append(online_player.name)
+            acceptor_xuid = self.__player_xuid(online_player)
+            if acceptor_xuid is None:
+                continue
 
-        if len(player_name_list) == 0:
+            if online_player.name == player.name:
+                continue
+
+            # Preserve UTP's original default-enabled policy for real players
+            # whose setting has not been initialized yet (for example after a
+            # plugin reload), while fake players are filtered above.
+            if not self.__tpa_setting_data.get(online_player.name, True):
+                continue
+
+            player_targets.append((online_player.name, acceptor_xuid))
+
+        if len(player_targets) == 0:
             player.send_message(
                 f"{ColorFormat.RED}"
                 f"[{self.lang_funct.get_text(player, 'send_request.message.fail1')}] "
@@ -121,7 +160,8 @@ class TPA:
 
             return
 
-        player_name_list.sort(key=lambda x:x[0].lower(), reverse=False)
+        player_targets.sort(key=lambda target: target[0].lower())
+        player_name_list = [name for name, _ in player_targets]
 
         dropdown1 = Dropdown(
             label=f"{ColorFormat.GREEN}"
@@ -157,34 +197,35 @@ class TPA:
         def on_submit(p: Player, json_str: str) -> None:
             data = json.loads(json_str)
 
-            acceptor_name = player_name_list[data[0]]
+            acceptor_name, acceptor_xuid = player_targets[data[0]]
 
             mode = mode_list[data[1]]
 
-            # Ensure that the target acceptor is still online!
-            if self.main.server.get_player(acceptor_name) is not None:
-                acceptor: Player = self.main.server.get_player(acceptor_name)
-
+            # Resolve the exact real player that was selected when the form was
+            # opened. This rejects disconnect/reconnect races and same-name fake
+            # player replacement instead of teleporting to a different entity.
+            acceptor = self.__get_real_player(acceptor_name, acceptor_xuid)
+            if acceptor is not None:
                 request_form = ActionForm(
                     title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
                           f"{self.lang_funct.get_text(acceptor, 'request_form.title').format(mode)}",
                     content=f"{ColorFormat.GREEN}"
                             f"{self.lang_funct.get_text(acceptor, 'request_form.content').format(p.name, mode)}",
-                    on_close=self.__busy(p.name, mode)
+                    on_close=self.__busy(p.name, sender_xuid, mode)
                 )
 
                 request_form.add_button(
                     f"{ColorFormat.YELLOW}"
                     f"{self.lang_funct.get_text(acceptor, 'request_form.button.accept')}",
                     icon="textures/ui/check",
-                    on_click=self.__request_handler(p.name, mode, "accept")
+                    on_click=self.__request_handler(p.name, sender_xuid, mode, "accept")
                 )
 
                 request_form.add_button(
                     f"{ColorFormat.YELLOW}"
                     f"{self.lang_funct.get_text(acceptor, 'request_form.button.deny')}",
                     icon="textures/ui/cancel",
-                    on_click=self.__request_handler(p.name, mode, "deny")
+                    on_click=self.__request_handler(p.name, sender_xuid, mode, "deny")
                 )
 
                 acceptor.send_form(request_form)
@@ -205,11 +246,10 @@ class TPA:
 
         player.send_form(send_request_form)
 
-    def __busy(self, sender_name: str, mode: str):
+    def __busy(self, sender_name: str, sender_xuid: str, mode: str):
         def on_click(acceptor: Player) -> None:
-            if self.main.server.get_player(sender_name) is not None:
-                sender: Player = self.main.server.get_player(sender_name)
-
+            sender = self.__get_real_player(sender_name, sender_xuid)
+            if sender is not None:
                 sender.send_message(
                     f"{ColorFormat.RED}"
                     f"[{self.lang_funct.get_text(sender, 'send_request.message.fail2').format(mode)}] "
@@ -219,12 +259,11 @@ class TPA:
 
         return on_click
 
-    def __request_handler(self, sender_name: str, mode: str, selection: str):
+    def __request_handler(self, sender_name: str, sender_xuid: str, mode: str, selection: str):
         def on_click(player: Player) -> None:
             if selection == "accept":
-                if self.main.server.get_player(sender_name) is not None:
-                    sender: Player = self.main.server.get_player(sender_name)
-
+                sender = self.__get_real_player(sender_name, sender_xuid)
+                if sender is not None:
                     if mode == "TPA":
                         sender.teleport(player)
                     else:
@@ -237,9 +276,8 @@ class TPA:
                         f"{self.lang_funct.get_text(player, 'accept.message.fail.reason').format(sender_name)}"
                     )
             else:
-                if self.main.server.get_player(sender_name) is not None:
-                    sender: Player = self.main.server.get_player(sender_name)
-
+                sender = self.__get_real_player(sender_name, sender_xuid)
+                if sender is not None:
                     sender.send_message(
                         f"{ColorFormat.RED}"
                         f"{self.lang_funct.get_text(sender, 'deny.message').format(player.name, mode)}"
