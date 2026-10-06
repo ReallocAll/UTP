@@ -3,10 +3,13 @@ from endstone_utp.functions.warp import Warp
 from endstone_utp.functions.back import Back
 from endstone_utp.functions.tpa import TPA
 from endstone_utp.functions.tpr import TPR
+from endstone_utp.functions.admin_teleport import AdminTeleport
 
 __all__ = [
     "Home",
     "Warp",
     "Back",
-    "TPA"
+    "TPA",
+    "TPR",
+    "AdminTeleport"
 ]
