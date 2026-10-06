@@ -55,7 +55,6 @@ class TPR:
 
         tpr_range = self.config_funct.config_data["tpr_range"]
 
-        print(tpr_range)
 
         if player.name.find(" ") != -1:
             player_name = f'"{player.name}"'
