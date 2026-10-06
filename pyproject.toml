@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "endstone-utp"
-version = "260123.post1"
+version = "260123.post2"
 description = "A de-commanded teleportation collection plugin for EndstoneMC."
 requires-python = ">=3.10"
 
