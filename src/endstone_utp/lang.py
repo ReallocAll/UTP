@@ -39,7 +39,7 @@ class Lang:
                     "main_form.button.home": "私人传送点",
                     "main_form.button.warp": "公共传送点",
                     "main_form.button.back": "返回上一死亡点",
-                    "main_form.button.tpa": "TPA & TPAHere",
+                    "main_form.button.tpa": "请求传送",
                     "main_form.button.tpr": "随机传送",
                     "main_form.button.reload_config": "重载配置文件",
 
@@ -152,13 +152,13 @@ class Lang:
 
                     "death_penalty.message": "死亡惩罚!!!",
 
-                    "tpa_form.title": "TPA & TPAHere",
+                    "tpa_form.title": "请求传送",
                     "tpa_form.content": "请选择操作...",
-                    "tpa_form.button.tpa_setting": "TPA & TPAHere 设置",
+                    "tpa_form.button.tpa_setting": "请求传送设置",
                     "tpa_form.button.send_request": "发送新请求",
 
                     "tpa_setting_form.toggle.label": "其他玩家能否向你发送 TPA/TPAHere 请求?",
-                    "tpa_setting_form.title": "TPA & TPAHere 设置",
+                    "tpa_setting_form.title": "请求传送设置",
                     "tpa_setting_form.submit_button": "更新",
                     "tpa_setting.message.success": "更新 TPA & TPAHere 设置成功...",
 
@@ -195,7 +195,7 @@ class Lang:
                     "reload_function_toggles.home": "私人传送点",
                     "reload_function_toggles.warp": "公共传送点",
                     "reload_function_toggles.back": "返回上一死亡点",
-                    "reload_function_toggles.tpa": "TPA & TPAHere",
+                    "reload_function_toggles.tpa": "请求传送",
                     "reload_function_toggles.tpr": "随机传送",
                     "reload_function_toggles.death_penalty": "死亡惩罚",
                     "reload_function_toggles_form.title": "重载功能启用状态",
@@ -239,7 +239,7 @@ class Lang:
                     "main_form.button.home": "Home",
                     "main_form.button.warp": "Warp",
                     "main_form.button.back": "Back",
-                    "main_form.button.tpa": "TPA & TPAHere",
+                    "main_form.button.tpa": "Teleport Request",
                     "main_form.button.tpr": "TPR",
                     "main_form.button.reload_config": "Reload configurations",
 
@@ -352,13 +352,13 @@ class Lang:
 
                     "death_penalty.message": "Death penalty!!!",
 
-                    "tpa_form.title": "TPA & TPAHere",
+                    "tpa_form.title": "Teleport Request",
                     "tpa_form.content": "Please select a function...",
-                    "tpa_form.button.tpa_setting": "TPA & TPAHere setting",
+                    "tpa_form.button.tpa_setting": "Teleport Request Settings",
                     "tpa_form.button.send_request": "Send a new request",
 
                     "tpa_setting_form.toggle.label": "Can other players send TPA/TPAHere requests to you?",
-                    "tpa_setting_form.title": "TPA & TPAHere setting",
+                    "tpa_setting_form.title": "Teleport Request Settings",
                     "tpa_setting_form.submit_button": "Update",
                     "tpa_setting.message.success": "Successfully updated tpa setting...",
 
@@ -395,7 +395,7 @@ class Lang:
                     "reload_function_toggles.home": "Home",
                     "reload_function_toggles.warp": "Warp",
                     "reload_function_toggles.back": "Back",
-                    "reload_function_toggles.tpa": "TPA & TPAHere",
+                    "reload_function_toggles.tpa": "Teleport Request",
                     "reload_function_toggles.tpr": "TPR",
                     "reload_function_toggles.death_penalty": "Death penalty",
                     "reload_function_toggles_form.title": "Reload function toggles",
