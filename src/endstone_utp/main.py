@@ -13,6 +13,7 @@ from endstone_utp.functions.warp import Warp
 from endstone_utp.functions.back import Back
 from endstone_utp.functions.tpa import TPA
 from endstone_utp.functions.tpr import TPR
+from endstone_utp.functions.admin_teleport import AdminTeleport
 
 
 class Main(Plugin):
@@ -36,6 +37,7 @@ class Main(Plugin):
         self.back_funct = Back(self)
         self.tpa_funct = TPA(self)
         self.tpr_funct = TPR(self)
+        self.admin_teleport_funct = AdminTeleport(self)
 
     commands = {
         "utp": {
@@ -122,6 +124,14 @@ class Main(Plugin):
                     f"{self.lang_funct.get_text(sender, 'main_form.button.tpr')}",
                     icon="textures/ui/icon_random",
                     on_click=self.tpr_funct.tpr_main
+                )
+
+            if sender.is_op:
+                main_form.add_button(
+                    f"{ColorFormat.YELLOW}"
+                    f"{self.admin_teleport_funct.button_text(sender)}",
+                    icon="textures/ui/realmsIcon",
+                    on_click=self.admin_teleport_funct.admin_teleport_main
                 )
 
             main_form.add_button(
