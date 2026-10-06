@@ -76,9 +76,14 @@ class Config:
         for key, value in self.config_data["is_enabled"].items():
             text_key = "reload_function_toggles." + key
 
+            if key == "tpa":
+                label = self.main.tpa_funct.button_text(player)
+            else:
+                label = self.lang_funct.get_text(player, text_key)
+
             toggle = Toggle(
                 label=f"{ColorFormat.GREEN}"
-                      f"{self.lang_funct.get_text(player, text_key)}"
+                      f"{label}"
             )
 
             if value:
