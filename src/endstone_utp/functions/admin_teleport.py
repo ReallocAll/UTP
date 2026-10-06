@@ -12,7 +12,7 @@ class AdminTeleport:
 
     @staticmethod
     def __is_chinese(player: Player) -> bool:
-        return player.locale.lower().startswith("zh")
+        return str(player.locale).lower().startswith("zh")
 
     def button_text(self, player: Player) -> str:
         if self.__is_chinese(player):
@@ -114,14 +114,16 @@ class AdminTeleport:
 
             p.teleport(target_location)
 
+            message = self.__text(p, "success").format(
+                self.__dimension_name(p, target_dimension),
+                self.__format_coordinate(x),
+                self.__format_coordinate(y),
+                self.__format_coordinate(z)
+            )
+
             p.send_message(
                 f"{ColorFormat.YELLOW}"
-                f"{self.__text(p, 'success').format(
-                    self.__dimension_name(p, target_dimension),
-                    self.__format_coordinate(x),
-                    self.__format_coordinate(y),
-                    self.__format_coordinate(z)
-                )}"
+                f"{message}"
             )
 
         form.on_submit = on_submit
