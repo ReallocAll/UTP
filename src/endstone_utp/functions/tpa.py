@@ -205,14 +205,14 @@ class TPA:
         settings_form.add_button(
             f"{ColorFormat.YELLOW}"
             f"{self.__text(player, 'blacklist').format(len(settings['blacklist']))}",
-            icon="textures/ui/icon_lock",
+            icon="textures/ui/cancel",
             on_click=self.__manage_list("blacklist")
         )
 
         settings_form.add_button(
             f"{ColorFormat.YELLOW}"
             f"{self.__text(player, 'whitelist').format(len(settings['whitelist']))}",
-            icon="textures/ui/icon_best3",
+            icon="textures/ui/check",
             on_click=self.__manage_list("whitelist")
         )
 
