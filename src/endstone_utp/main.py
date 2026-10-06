@@ -86,6 +86,14 @@ class Main(Plugin):
                         f"{self.lang_funct.get_text(sender, 'main_form.content')}"
             )
 
+            if self.config_funct.config_data["is_enabled"]["tpa"]:
+                main_form.add_button(
+                    f"{ColorFormat.YELLOW}"
+                    f"{self.tpa_funct.button_text(sender)}",
+                    icon="textures/ui/dressing_room_customization",
+                    on_click=self.tpa_funct.tpa_main
+                )
+
             if self.config_funct.config_data["is_enabled"]["home"]:
                 main_form.add_button(
                     f"{ColorFormat.YELLOW}"
@@ -110,14 +118,6 @@ class Main(Plugin):
                     on_click=self.back_funct.back_main
                 )
 
-            if self.config_funct.config_data["is_enabled"]["tpa"]:
-                main_form.add_button(
-                    f"{ColorFormat.YELLOW}"
-                    f"{self.lang_funct.get_text(sender, 'main_form.button.tpa')}",
-                    icon="textures/ui/dressing_room_customization",
-                    on_click=self.tpa_funct.tpa_main
-                )
-
             if self.config_funct.config_data["is_enabled"]["tpr"]:
                 main_form.add_button(
                     f"{ColorFormat.YELLOW}"
@@ -140,6 +140,14 @@ class Main(Plugin):
                 icon="textures/ui/icon_setting",
                 on_click=self.config_funct.reload_config_main
             )
+
+            if self.config_funct.config_data["is_enabled"]["tpa"]:
+                main_form.add_button(
+                    f"{ColorFormat.YELLOW}"
+                    f"{self.tpa_funct.settings_button_text(sender)}",
+                    icon="textures/ui/icon_setting",
+                    on_click=self.tpa_funct.settings_main
+                )
 
             if self.server.plugin_manager.get_plugin("zx_ui") is None:
                 main_form.on_close = None
