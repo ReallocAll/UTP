@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
 
     steps:
       - uses: actions/checkout@v7
@@ -48,7 +48,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
 
       - name: Install build frontend
         run: |
@@ -61,9 +61,12 @@ jobs:
       - name: Verify wheel
         shell: python
         run: |
+          from email.parser import Parser
           from pathlib import Path
+          import tomllib
           from zipfile import ZipFile
 
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
           wheels = list(Path("dist").glob("*.whl"))
           assert len(wheels) == 1, wheels
 
@@ -73,6 +76,13 @@ jobs:
           with ZipFile(wheel) as archive:
               names = set(archive.namelist())
               assert "endstone_utp/__init__.py" in names, sorted(names)
+
+              metadata_files = [name for name in names if name.endswith(".dist-info/METADATA")]
+              assert len(metadata_files) == 1, metadata_files
+              metadata = Parser().parsestr(archive.read(metadata_files[0]).decode("utf-8"))
+              assert metadata["Name"] == project["name"], metadata["Name"]
+              assert metadata["Version"] == project["version"], metadata["Version"]
+              assert set(metadata["Requires-Python"].split(",")) == {">=3.11", "<3.16"}, metadata["Requires-Python"]
 
               entry_points = [
                   name for name in names
@@ -96,11 +106,54 @@ jobs:
     name: Create GitHub Release
     needs: wheel
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The master-push exception publishes only the explicitly requested post5 release.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+       github.event.before == '529d8f815a8a883892372592d164d5a3006e9052' &&
+       github.event.head_commit.message == 'release: support Python 3.11-3.15 (260123.post5)')
     permissions:
       contents: write
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Verify release target
+        id: release-target
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import tomllib
+
+          sha = os.environ["RELEASE_SHA"]
+          assert subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == sha
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          tag = os.environ["REF_NAME"]
+          if os.environ["REF_TYPE"] != "tag":
+              assert project["version"] == "260123.post5", project["version"]
+              previous = subprocess.check_output(["git", "show", f"{sha}^:pyproject.toml"], text=True)
+              assert tomllib.loads(previous)["project"]["version"] == "260123.post4"
+              tag = "v260123.post5"
+          assert tag == f"v{project['version']}", (tag, project["version"])
+          refs = subprocess.check_output(
+              ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
+              text=True,
+          )
+          targets = {ref: commit for commit, ref in (line.split() for line in refs.splitlines())}
+          if targets:
+              target = targets.get(f"refs/tags/{tag}^{{}}", targets.get(f"refs/tags/{tag}"))
+              assert target == sha, (tag, target, sha)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"tag={tag}\n")
+
       - uses: actions/download-artifact@v8
         with:
           pattern: endstone_utp-*.whl
@@ -111,6 +164,8 @@ jobs:
       - name: Create Release and attach wheel
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release-target.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: artifacts/*.whl
           generate_release_notes: true
           fail_on_unmatched_files: true

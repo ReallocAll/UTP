@@ -22,7 +22,7 @@
 ***
 
 ### 📦 Installation
-**Tips:** *UTP is adapted to all versions of Endstone.*
+UTP supports Python 3.11–3.15 and targets Endstone API 0.10. Use an Endstone server with a matching Python runtime; the universal `.whl` works across these Python versions.
 
 <details> 
 <summary>Check pre-plugins</summary>
@@ -180,7 +180,7 @@ You can view related screenshots of UTP from images folder of this repo.
 
 
 ### Development checks
-Run the focused regression suite with Python 3.10 or newer (no additional test dependencies):
+Run the focused regression suite with Python 3.11–3.15 (no additional test dependencies). CI runs it on every supported Python version and builds the universal wheel with Python 3.15:
 
 ```sh
 PYTHONPATH=src python -m unittest discover -s tests -v
