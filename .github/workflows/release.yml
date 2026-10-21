@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    name: Syntax (Python ${{ matrix.python-version }})
+    name: Regression tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -28,6 +28,11 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Run regression tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
 
       - name: Compile Python sources
         run: python -m compileall -q src/endstone_utp

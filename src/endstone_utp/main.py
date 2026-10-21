@@ -6,7 +6,7 @@ from endstone.command import Command, CommandSender, CommandSenderWrapper
 from endstone.form import ActionForm
 
 from endstone_utp.lang import Lang
-from endstone_utp.config import Config
+from endstone_utp.config import ADMIN_PERMISSION, Config
 
 from endstone_utp.functions.home import Home
 from endstone_utp.functions.warp import Warp
@@ -19,9 +19,8 @@ from endstone_utp.functions.admin_teleport import AdminTeleport
 class Main(Plugin):
     api_version = "0.10"
 
-    def __init__(self):
-        super().__init__()
-
+    def on_load(self) -> None:
+        # Endstone initializes the logger and server after constructing the plugin.
         self.first_dir_path = os.path.join(os.getcwd(), "plugins", "utp")
 
         if not os.path.exists(self.first_dir_path):
@@ -51,6 +50,10 @@ class Main(Plugin):
         "Main.command.utp": {
             "description": "Call out the main form of UTP...",
             "default": True
+        },
+        ADMIN_PERMISSION: {
+            "description": "Edit and reload UTP configuration",
+            "default": "op"
         }
     }
 
@@ -134,12 +137,13 @@ class Main(Plugin):
                     on_click=self.admin_teleport_funct.admin_teleport_main
                 )
 
-            main_form.add_button(
-                f"{ColorFormat.YELLOW}"
-                f"{self.lang_funct.get_text(sender, 'main_form.button.reload_config')}",
-                icon="textures/ui/icon_setting",
-                on_click=self.config_funct.reload_config_main
-            )
+            if sender.has_permission(ADMIN_PERMISSION):
+                main_form.add_button(
+                    f"{ColorFormat.YELLOW}"
+                    f"{self.lang_funct.get_text(sender, 'config.title')}",
+                    icon="textures/ui/icon_setting",
+                    on_click=self.config_funct.reload_config_main
+                )
 
             if self.config_funct.config_data["is_enabled"]["tpa"]:
                 main_form.add_button(

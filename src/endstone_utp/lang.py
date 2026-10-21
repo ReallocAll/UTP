@@ -4,6 +4,65 @@ import json
 from endstone import ColorFormat, Player
 
 
+# New keys also provide runtime defaults for existing, customized language files.
+CONFIG_TEXT = {
+    "zh_CN": {
+        "config.title": "配置管理",
+        "config.content": "从磁盘重载，或编辑当前生效的配置。",
+        "config.button.reload": "从磁盘重载 config.json",
+        "config.button.toggles": "编辑功能开关",
+        "config.button.global": "编辑全局配置",
+        "config.button.save": "保存并应用",
+        "config.message.no_permission": "你没有管理 UTP 配置的权限。",
+        "config.message.reloaded": "已从磁盘重载并应用配置。",
+        "config.message.reload_failed": "重载失败，当前配置保持不变。请查看服务器日志，修复 config.json 后重试。",
+        "config.message.saved": "配置已保存并生效。",
+        "config.message.save_failed": "保存失败，当前配置保持不变。请查看服务器日志。",
+        "config.message.conflict": "配置已被修改。请从磁盘重载，再重新打开编辑表单。此次修改未保存。",
+        "config.toggle.home": "私人传送点",
+        "config.toggle.warp": "公共传送点",
+        "config.toggle.back": "返回上一死亡点",
+        "config.toggle.tpa": "请求传送",
+        "config.toggle.tpr": "随机传送",
+        "config.toggle.death_penalty": "死亡惩罚",
+        "config.field.max_home": "每个玩家可创建的私人传送点数量上限",
+        "config.field.back_expiry_window": "死亡点记录保留时间（秒）",
+        "config.field.death_penalty_rate": "死亡惩罚比率",
+        "config.field.tpr_range": "随机传送范围",
+        "config.field.tpr_cooldown": "随机传送冷却时间（秒）",
+        "config.hint.integer": "输入一个正整数",
+        "config.hint.rate": "输入大于 0 且小于 1 的有限小数"
+    },
+    "en_US": {
+        "config.title": "Configuration",
+        "config.content": "Reload from disk, or edit the active configuration.",
+        "config.button.reload": "Reload config.json from disk",
+        "config.button.toggles": "Edit function toggles",
+        "config.button.global": "Edit global configuration",
+        "config.button.save": "Save and apply",
+        "config.message.no_permission": "You do not have permission to manage UTP configuration.",
+        "config.message.reloaded": "Configuration reloaded from disk and applied.",
+        "config.message.reload_failed": "Reload failed; the active configuration is unchanged. Check the server log, repair config.json and try again.",
+        "config.message.saved": "Configuration saved and applied.",
+        "config.message.save_failed": "Save failed; the active configuration is unchanged. Check the server log.",
+        "config.message.conflict": "Configuration changed. Reload from disk, then reopen the editor. Your changes were not saved.",
+        "config.toggle.home": "Home",
+        "config.toggle.warp": "Warp",
+        "config.toggle.back": "Back",
+        "config.toggle.tpa": "Teleport Request",
+        "config.toggle.tpr": "TPR",
+        "config.toggle.death_penalty": "Death penalty",
+        "config.field.max_home": "Maximum homes per player",
+        "config.field.back_expiry_window": "Death record lifetime (seconds)",
+        "config.field.death_penalty_rate": "Death penalty rate",
+        "config.field.tpr_range": "Random teleport range",
+        "config.field.tpr_cooldown": "Random teleport cooldown (seconds)",
+        "config.hint.integer": "Enter a positive integer",
+        "config.hint.rate": "Enter a finite number greater than 0 and less than 1"
+    }
+}
+
+
 class Lang:
     def __init__(self, main: "Main"):
         self.main = main
@@ -187,34 +246,7 @@ class Lang:
                     "tpr.message.fail.reason2": "随机传送冷却中, 请再等待 {0}s...",
                     "tpr.message.broadcast": "玩家: {0} 正在进行随机传送, 这可能会造成服务器卡顿...",
 
-                    "reload_config_form.title": "重载配置文件",
-                    "reload_config_form.content": "请选择操作...",
-                    "reload_config_form.button.reload_function_toggles": "重载功能启用状态",
-                    "reload_config_form.button.reload_global_config": "重载全局配置文件",
-
-                    "reload_function_toggles.home": "私人传送点",
-                    "reload_function_toggles.warp": "公共传送点",
-                    "reload_function_toggles.back": "返回上一死亡点",
-                    "reload_function_toggles.tpa": "请求传送",
-                    "reload_function_toggles.tpr": "随机传送",
-                    "reload_function_toggles.death_penalty": "死亡惩罚",
-                    "reload_function_toggles_form.title": "重载功能启用状态",
-                    "reload_function_toggles_form.submit_button": "重载",
-                    "reload_function_toggles.message.success": "重载功能启用状态成功...",
-
-                    "reload_global_config_form.textinput1.label": "当前每个玩家可创建的私人传送点的最大数目",
-                    "reload_global_config_form.textinput1.placeholder": "输入一个正整数...",
-                    "reload_global_config_form.textinput2.label": "当前返回上一死亡点过期时长",
-                    "reload_global_config_form.textinput2.placeholder": "输入一个正整数...",
-                    "reload_global_config_form.textinput3.label": "当前死亡惩罚比率",
-                    "reload_global_config_form.textinput3.placeholder": "输入一个小于 1.O 的 正小数...",
-                    "reload_global_config_form.textinput4.label": "当前随机传送范围",
-                    "reload_global_config_form.textinput4.placeholder": "输入一个正整数...",
-                    "reload_global_config_form.textinput5.label": "当前随机传送冷却时长",
-                    "reload_global_config_form.textinput5.placeholder": "输入一个正整数...",
-                    "reload_global_config_form.title": "重载全局配置文件",
-                    "reload_global_config_form.submit_button": "重载",
-                    "reload_global_config.message.success": "重载全局配置文件成功...",
+                    **CONFIG_TEXT["zh_CN"],
                 }
                 json_str = json.dumps(zh_CN, indent=4, ensure_ascii=False)
                 f.write(json_str)
@@ -252,7 +284,7 @@ class Lang:
                     "add_home_form.title": "Add a new home",
                     "add_home_form.submit_button": "Add",
                     "add_home.message.fail": "Failed to add a new home",
-                    "add_home.message.fail.reason1": "you already have {0} homes, which is the max num allocated to each player by the server...",
+                    "add_home.message.fail.reason1": "you already have {0} homes, at or above the current limit...",
                     "add_home.message.fail.reason2": "you already have a home named: {0}...",
                     "add_home.message.success": "Successfully added a new home...",
 
@@ -387,34 +419,7 @@ class Lang:
                     "tpr.message.fail.reason2": "TPR is on cooldown, please wait {0} more seconds...",
                     "tpr.message.broadcast": "player: {0} is undergoing random teleportation, which may cause server lag...",
 
-                    "reload_config_form.title": "Reload configurations",
-                    "reload_config_form.content": "Please select a function...",
-                    "reload_config_form.button.reload_function_toggles": "Reload function toggles",
-                    "reload_config_form.button.reload_global_config": "Reload global configurations",
-
-                    "reload_function_toggles.home": "Home",
-                    "reload_function_toggles.warp": "Warp",
-                    "reload_function_toggles.back": "Back",
-                    "reload_function_toggles.tpa": "Teleport Request",
-                    "reload_function_toggles.tpr": "TPR",
-                    "reload_function_toggles.death_penalty": "Death penalty",
-                    "reload_function_toggles_form.title": "Reload function toggles",
-                    "reload_function_toggles_form.submit_button": "Reload",
-                    "reload_function_toggles.message.success": "Successfully reloaded function toggles...",
-
-                    "reload_global_config_form.textinput1.label": "The current max num of homes a player can create",
-                    "reload_global_config_form.textinput1.placeholder": "Input a positive integer...",
-                    "reload_global_config_form.textinput2.label": "The current back expiry window",
-                    "reload_global_config_form.textinput2.placeholder": "Input a positive integer...",
-                    "reload_global_config_form.textinput3.label": "The current death penalty rate",
-                    "reload_global_config_form.textinput3.placeholder": "Input a positive decimal less than 1.0...",
-                    "reload_global_config_form.textinput4.label": "The current TPR range",
-                    "reload_global_config_form.textinput4.placeholder": "Input a positive integer...",
-                    "reload_global_config_form.textinput5.label": "The current TPR cooldown",
-                    "reload_global_config_form.textinput5.placeholder": "Input a positive integer...",
-                    "reload_global_config_form.title": "Reload global configurations",
-                    "reload_global_config_form.submit_button": "Reload",
-                    "reload_global_config.message.success": "Successfully reload global configurations...",
+                    **CONFIG_TEXT["en_US"],
                 }
                 json_str = json.dumps(en_US, indent=4, ensure_ascii=False)
                 f.write(json_str)
@@ -428,6 +433,11 @@ class Lang:
 
             with open(lang_file_path, "r", encoding="utf-8") as f:
                 lang_data[lang_name] = json.loads(f.read())
+
+        for locale, defaults in CONFIG_TEXT.items():
+            loaded = lang_data.setdefault(locale, {})
+            for key, value in defaults.items():
+                loaded.setdefault(key, value)
 
         return lang_data
 

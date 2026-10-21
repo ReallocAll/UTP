@@ -77,10 +77,10 @@ class Home:
 
         player.send_form(home_form)
 
-    def __add_home(self, player: Player) -> None:
+    def __can_add_home(self, player: Player) -> bool:
         home_count = len(self.__home_data[player.name])
 
-        if home_count == self.config_funct.config_data["max_home"]:
+        if home_count >= self.config_funct.config_data["max_home"]:
             player.send_message(
                 f"{ColorFormat.RED}"
                 f"[{self.lang_funct.get_text(player, 'add_home.message.fail')}] "
@@ -88,6 +88,11 @@ class Home:
                 f"{self.lang_funct.get_text(player, 'add_home.message.fail.reason1').format(home_count)}"
             )
 
+            return False
+        return True
+
+    def __add_home(self, player: Player) -> None:
+        if not self.__can_add_home(player):
             return
 
         dim = player.location.dimension.name
@@ -127,6 +132,8 @@ class Home:
         )
 
         def on_submit(p: Player, json_str: str) -> None:
+            if not self.__can_add_home(p):
+                return
             data = json.loads(json_str)
 
             home_name = data[0]

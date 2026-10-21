@@ -1,226 +1,228 @@
-import os
 import json
+import math
+import os
+from copy import deepcopy
+from pathlib import Path
 
 from endstone import ColorFormat, Player
 from endstone.form import ActionForm, ModalForm, Toggle, TextInput
+
+from endstone_utp.storage import FileChangedError, atomic_write_json
+
+
+ADMIN_PERMISSION = "utp.admin"
+GLOBAL_FIELDS = (
+    ("max_home", int),
+    ("back_expiry_window", int),
+    ("death_penalty_rate", float),
+    ("tpr_range", int),
+    ("tpr_cooldown", int),
+)
+TOGGLE_FIELDS = ("home", "warp", "back", "tpa", "tpr", "death_penalty")
+DEFAULT_CONFIG = {
+    "max_home": 5,
+    "back_expiry_window": 30,
+    "death_penalty_rate": 0.01,
+    "tpr_range": 2000,
+    "tpr_cooldown": 60,
+    "is_enabled": dict.fromkeys(TOGGLE_FIELDS, True),
+}
+DEFAULT_CONFIG["is_enabled"]["death_penalty"] = False
+
+
+def validate_config(data: dict) -> None:
+    """Validate known fields without discarding unrelated keys from the file."""
+    if not isinstance(data, dict):
+        raise ValueError("config.json must contain an object")
+    for key, value_type in GLOBAL_FIELDS:
+        value = data.get(key)
+        if value_type is int:
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{key} must be a positive integer")
+        elif type(value) not in (int, float) or not 0 < value < 1 or not math.isfinite(value):
+            raise ValueError(f"{key} must be finite and greater than 0 and less than 1")
+    toggles = data.get("is_enabled")
+    if not isinstance(toggles, dict):
+        raise ValueError("is_enabled must contain an object")
+    for key in TOGGLE_FIELDS:
+        if type(toggles.get(key)) is not bool:
+            raise ValueError(f"is_enabled.{key} must be a boolean")
+
+
+def _reject_constant(value: str):
+    raise ValueError(f"{value} is not valid JSON")
 
 
 class Config:
     def __init__(self, main: "Main"):
         self.main = main
-
-        self.__config_data_file_path = os.path.join(self.main.first_dir_path, "config.json")
-        self.config_data = self.__load_config_data()
-
         self.lang_funct = main.lang_funct
-
-    def __load_config_data(self) -> dict:
-        if not os.path.exists(self.__config_data_file_path):
-            with open(self.__config_data_file_path, "w") as f:
-                config_data = {
-                    "max_home": 5,
-                    "back_expiry_window": 30,   # In seconds
-                    "death_penalty_rate": 0.01,
-                    "tpr_range": 2000,
-                    "tpr_cooldown": 60,     # In seconds
-                    "is_enabled": {
-                        "home": True,
-                        "warp": True,
-                        "back": True,
-                        "tpa": True,
-                        "tpr": True,
-                        "death_penalty": False,
-                    }
-                }
-                json_str = json.dumps(config_data, indent=4, ensure_ascii=False)
-                f.write(json_str)
-        else:
-            with open(self.__config_data_file_path, "r") as f:
-                config_data = json.loads(f.read())
-
-        return config_data
-
-    def __save_config_data(self) -> None:
-        with open(self.__config_data_file_path, "w+") as f:
-            json_str = json.dumps(self.config_data, indent=4, ensure_ascii=False)
-            f.write(json_str)
-
-    def reload_config_main(self, player: Player):
-        reload_config_form = ActionForm(
-            title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
-                  f"{self.lang_funct.get_text(player, 'reload_config_form.title')}",
-            content=f"{ColorFormat.GREEN}"
-                    f"{self.lang_funct.get_text(player, 'reload_config_form.content')}",
-            on_close=self.main.back_to_main_form
-        )
-
-        reload_config_form.add_button(
-            f"{ColorFormat.YELLOW}"
-            f"{self.lang_funct.get_text(player, 'reload_config_form.button.reload_function_toggles')}",
-            icon="textures/ui/craft_toggle_off",
-            on_click=self.__reload_function_toggles
-        )
-
-        reload_config_form.add_button(
-            f"{ColorFormat.YELLOW}"
-            f"{self.lang_funct.get_text(player, 'reload_config_form.button.reload_global_config')}",
-            icon="textures/ui/icon_setting",
-            on_click=self.__reload_global_config
-        )
-
-        player.send_form(reload_config_form)
-
-    def __reload_function_toggles(self, player: Player) -> None:
-        controls_list = []
-
-        for key, value in self.config_data["is_enabled"].items():
-            text_key = "reload_function_toggles." + key
-
-            if key == "tpa":
-                label = self.main.tpa_funct.button_text(player)
-            else:
-                label = self.lang_funct.get_text(player, text_key)
-
-            toggle = Toggle(
-                label=f"{ColorFormat.GREEN}"
-                      f"{label}"
+        self.__config_data_file_path = Path(os.path.join(main.first_dir_path, "config.json"))
+        self.__revision = 0
+        try:
+            self.config_data, self.__disk_content = self.__read_config_data()
+        except FileNotFoundError as error:
+            if self.__config_data_file_path.is_symlink():
+                self.main.logger.error(f"Cannot load UTP config.json; broken symlink left unchanged: {error}")
+                raise
+            self.config_data = deepcopy(DEFAULT_CONFIG)
+            self.__disk_content = atomic_write_json(
+                self.__config_data_file_path, self.config_data, expected_content=None
             )
+        except (OSError, ValueError) as error:
+            self.main.logger.error(f"Cannot load UTP config.json; file left unchanged: {error}")
+            raise
 
-            if value:
-                toggle.default_value = True
-            else:
-                toggle.default_value = False
+    def __read_config_data(self) -> tuple[dict, bytes]:
+        content = self.__config_data_file_path.read_bytes()
+        candidate = json.loads(content.decode("utf-8"), parse_constant=_reject_constant)
+        validate_config(candidate)
+        return candidate, content
 
-            controls_list.append(toggle)
+    def __message(self, player: Player, key: str, *, error: bool = True) -> None:
+        color = ColorFormat.RED if error else ColorFormat.YELLOW
+        player.send_message(f"{color}{self.lang_funct.get_text(player, key)}")
 
-        reload_function_toggles_form = ModalForm(
+    def __check_permission(self, player: Player) -> bool:
+        if player.has_permission(ADMIN_PERMISSION):
+            return True
+        self.__message(player, "config.message.no_permission")
+        return False
+
+    def reload_config_main(self, player: Player) -> None:
+        if not self.__check_permission(player):
+            return
+        form = ActionForm(
             title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
-                  f"{self.lang_funct.get_text(player, 'reload_function_toggles_form.title')}",
-            controls=controls_list,
-            submit_button=f"{ColorFormat.YELLOW}"
-                          f"{self.lang_funct.get_text(player, 'reload_function_toggles_form.submit_button')}",
-            on_close=self.reload_config_main
+                  f"{self.lang_funct.get_text(player, 'config.title')}",
+            content=self.lang_funct.get_text(player, "config.content"),
+            on_close=self.main.back_to_main_form,
+        )
+        for key, callback, icon in (
+            ("config.button.reload", self.reload_from_disk, "textures/ui/refresh"),
+            ("config.button.toggles", self.__edit_function_toggles, "textures/ui/craft_toggle_off"),
+            ("config.button.global", self.__edit_global_config, "textures/ui/icon_setting"),
+        ):
+            form.add_button(
+                f"{ColorFormat.YELLOW}{self.lang_funct.get_text(player, key)}",
+                icon=icon, on_click=callback,
+            )
+        player.send_form(form)
+
+    def reload_from_disk(self, player: Player) -> None:
+        if not self.__check_permission(player):
+            return
+        try:
+            candidate, content = self.__read_config_data()
+        except (OSError, ValueError) as error:
+            self.main.logger.error(f"Cannot reload UTP config.json; keeping active configuration: {error}")
+            self.__message(player, "config.message.reload_failed")
+            return
+        self.config_data = candidate
+        self.__disk_content = content
+        self.__revision += 1
+        self.__message(player, "config.message.reloaded", error=False)
+
+    def __save_candidate(self, player: Player, candidate: dict, revision: int) -> None:
+        # Recheck at the action, including permission revocation while a form is open.
+        if not self.__check_permission(player):
+            return
+        if revision != self.__revision:
+            self.__message(player, "config.message.conflict")
+            return
+        try:
+            validate_config(candidate)
+            content = atomic_write_json(
+                self.__config_data_file_path, candidate, expected_content=self.__disk_content
+            )
+        except FileChangedError:
+            self.__message(player, "config.message.conflict")
+            return
+        except (OSError, ValueError) as error:
+            self.main.logger.error(f"Cannot save UTP config.json; keeping active configuration: {error}")
+            self.__message(player, "config.message.save_failed")
+            return
+        self.config_data = candidate
+        self.__disk_content = content
+        self.__revision += 1
+        self.__message(player, "config.message.saved", error=False)
+
+    def __edit_function_toggles(self, player: Player) -> None:
+        if not self.__check_permission(player):
+            return
+        candidate = deepcopy(self.config_data)
+        revision = self.__revision
+        controls = [
+            Toggle(
+                label=self.main.tpa_funct.button_text(player) if key == "tpa"
+                else self.lang_funct.get_text(player, f"config.toggle.{key}"),
+                default_value=candidate["is_enabled"][key],
+            )
+            for key in TOGGLE_FIELDS
+        ]
+        form = ModalForm(
+            title=self.lang_funct.get_text(player, "config.button.toggles"),
+            controls=controls,
+            submit_button=self.lang_funct.get_text(player, "config.button.save"),
+            on_close=self.reload_config_main,
         )
 
         def on_submit(p: Player, json_str: str) -> None:
-            data = json.loads(json_str)
+            if not self.__check_permission(p):
+                return
+            try:
+                values = json.loads(json_str)
+                if not isinstance(values, list) or len(values) != len(TOGGLE_FIELDS):
+                    raise ValueError("Incorrect toggle count")
+                if any(type(value) is not bool for value in values):
+                    raise ValueError("Toggles must be booleans")
+                candidate["is_enabled"].update(zip(TOGGLE_FIELDS, values))
+            except (ValueError, TypeError):
+                self.__message(p, "message.error")
+                return
+            self.__save_candidate(p, candidate, revision)
 
-            data_index = 0
+        form.on_submit = on_submit
+        player.send_form(form)
 
-            for key1 in self.config_data["is_enabled"].keys():
-                self.config_data["is_enabled"][key1] = data[data_index]
-
-                data_index += 1
-
-            self.__save_config_data()
-
-            p.send_message(
-                f"{ColorFormat.YELLOW}"
-                f"{self.lang_funct.get_text(p, 'reload_function_toggles.message.success')}"
+    def __edit_global_config(self, player: Player) -> None:
+        if not self.__check_permission(player):
+            return
+        candidate = deepcopy(self.config_data)
+        revision = self.__revision
+        controls = [
+            TextInput(
+                label=self.lang_funct.get_text(player, f"config.field.{key}"),
+                placeholder=self.lang_funct.get_text(
+                    player, "config.hint.rate" if value_type is float else "config.hint.integer"
+                ),
+                default_value=str(candidate[key]),
             )
-
-        reload_function_toggles_form.on_submit = on_submit
-
-        player.send_form(reload_function_toggles_form)
-
-    def __reload_global_config(self, player: Player) -> None:
-        controls_list = []
-
-        index = 1
-
-        for key, value in self.config_data.items():
-            if key == "is_enabled":
-                continue
-
-            label_text_key = "reload_global_config_form.textinput" + str(index) + ".label"
-            placeholder_text_key = "reload_global_config_form.textinput" + str(index) + ".placeholder"
-
-            textinput = TextInput(
-                label=f"{ColorFormat.GREEN}"
-                      f"{self.lang_funct.get_text(player, label_text_key)}: "
-                      f"{ColorFormat.WHITE}"
-                      f"{value}",
-                placeholder=self.lang_funct.get_text(player, placeholder_text_key),
-                default_value=f"{value}"
-            )
-
-            controls_list.append(textinput)
-
-            index += 1
-
-        reload_global_config_form = ModalForm(
-            title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
-                  f"{self.lang_funct.get_text(player, 'reload_global_config_form.title')}",
-            controls=controls_list,
-            submit_button=f"{ColorFormat.YELLOW}"
-                          f"{self.lang_funct.get_text(player, 'reload_global_config_form.submit_button')}",
-            on_close=self.reload_config_main
+            for key, value_type in GLOBAL_FIELDS
+        ]
+        form = ModalForm(
+            title=self.lang_funct.get_text(player, "config.button.global"),
+            controls=controls,
+            submit_button=self.lang_funct.get_text(player, "config.button.save"),
+            on_close=self.reload_config_main,
         )
 
         def on_submit(p: Player, json_str: str) -> None:
-            pre_data: list = json.loads(json_str)
+            if not self.__check_permission(p):
+                return
+            try:
+                values = json.loads(json_str)
+                if not isinstance(values, list) or len(values) != len(GLOBAL_FIELDS):
+                    raise ValueError("Incorrect field count")
+                for (key, value_type), value in zip(GLOBAL_FIELDS, values):
+                    if not isinstance(value, str):
+                        raise ValueError("Text fields must contain strings")
+                    candidate[key] = value_type(value)
+                validate_config(candidate)
+            except (ValueError, TypeError, OverflowError):
+                self.__message(p, "message.error")
+                return
+            self.__save_candidate(p, candidate, revision)
 
-            data = []
-
-            for pre_data_value in pre_data:
-                if pre_data.index(pre_data_value) == 2:
-                    try:
-                        data_value = float(pre_data_value)
-                    except:
-                        p.send_message(
-                            f"{ColorFormat.RED}"
-                            f"{self.lang_funct.get_text(p, 'message.error')}"
-                        )
-
-                        return
-                else:
-                    try:
-                        data_value = int(pre_data_value)
-                    except:
-                        p.send_message(
-                            f"{ColorFormat.RED}"
-                            f"{self.lang_funct.get_text(p, 'message.error')}"
-                        )
-
-                        return
-
-                data.append(data_value)
-
-            for data_value in data:
-                if data.index(data_value) == 2:
-                    if data_value <= 0 or data_value >= 1:
-                        p.send_message(
-                            f"{ColorFormat.RED}"
-                            f"{self.lang_funct.get_text(p, 'message.error')}"
-                        )
-
-                        return
-                else:
-                    if data_value <= 0:
-                        p.send_message(
-                            f"{ColorFormat.RED}"
-                            f"{self.lang_funct.get_text(p, 'message.error')}"
-                        )
-
-                        return
-
-            data_index = 0
-
-            for key1 in self.config_data.keys():
-                if key1 == "is_enabled":
-                    continue
-
-                self.config_data[key1] = data[data_index]
-
-                data_index += 1
-
-            self.__save_config_data()
-
-            p.send_message(
-                f"{ColorFormat.YELLOW}"
-                f"{self.lang_funct.get_text(p, 'reload_global_config.message.success')}"
-            )
-
-        reload_global_config_form.on_submit = on_submit
-
-        player.send_form(reload_global_config_form)
+        form.on_submit = on_submit
+        player.send_form(form)

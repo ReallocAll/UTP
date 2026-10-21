@@ -5,6 +5,8 @@ from endstone import ColorFormat, Player
 from endstone.event import PlayerJoinEvent, event_handler
 from endstone.form import ActionForm, Dropdown, ModalForm, TextInput
 
+from endstone_utp.storage import atomic_write_json
+
 
 class TPA:
     def __init__(self, main: "Main"):
@@ -47,28 +49,42 @@ class TPA:
     def settings_button_text(self, player: Player) -> str:
         return self.__text(player, "request_settings")
 
-    def __load_tpa_setting_data(self) -> dict:
-        if not os.path.exists(self.__tpa_setting_file_path):
-            data = {}
-            self.__write_tpa_setting_data(data)
-            return data
-
+    def __load_tpa_setting_data(self) -> dict | None:
         try:
             with open(self.__tpa_setting_file_path, "r", encoding="utf-8") as f:
-                raw_data = json.loads(f.read())
-        except (OSError, json.JSONDecodeError):
-            return {}
+                raw_data = json.load(f)
+        except FileNotFoundError as error:
+            # A dangling symlink is not a new installation.
+            if os.path.lexists(self.__tpa_setting_file_path):
+                self.__report_storage_error("load", error)
+                return None
+            data = {}
+            return data if self.__write_tpa_setting_data(data) else None
+        except (OSError, ValueError) as error:
+            self.__report_storage_error("load", error)
+            return None
 
+        try:
+            data, migrated = self.__normalize_settings(raw_data)
+        except ValueError as error:
+            self.__report_storage_error("load", error)
+            return None
+
+        if migrated and not self.__write_tpa_setting_data(data):
+            return None
+
+        return data
+
+    def __normalize_settings(self, raw_data: object) -> tuple[dict, bool]:
         if not isinstance(raw_data, dict):
-            return {}
+            raise ValueError("expected a JSON object keyed by player name")
 
         data = {}
         migrated = False
 
         for player_name, value in raw_data.items():
             if not isinstance(player_name, str):
-                migrated = True
-                continue
+                raise ValueError("player names must be strings")
 
             if isinstance(value, bool):
                 data[player_name] = self.__default_settings(value)
@@ -76,36 +92,25 @@ class TPA:
                 continue
 
             if not isinstance(value, dict):
-                data[player_name] = self.__default_settings()
-                migrated = True
-                continue
+                raise ValueError(f"invalid settings for {player_name!r}")
 
             enabled = value.get("enabled", True)
             blacklist = value.get("blacklist", [])
             whitelist = value.get("whitelist", [])
 
             if not isinstance(enabled, bool):
-                enabled = True
-                migrated = True
+                raise ValueError(f"enabled must be a boolean for {player_name!r}")
 
-            if not isinstance(blacklist, list):
-                blacklist = []
-                migrated = True
+            for list_name, entries in (("blacklist", blacklist), ("whitelist", whitelist)):
+                if not isinstance(entries, list) or not all(
+                    isinstance(name, str) for name in entries
+                ):
+                    raise ValueError(
+                        f"{list_name} must be a list of names for {player_name!r}"
+                    )
 
-            if not isinstance(whitelist, list):
-                whitelist = []
-                migrated = True
-
-            blacklist = [
-                name.strip()
-                for name in blacklist
-                if isinstance(name, str) and name.strip()
-            ]
-            whitelist = [
-                name.strip()
-                for name in whitelist
-                if isinstance(name, str) and name.strip()
-            ]
+            blacklist = [name.strip() for name in blacklist if name.strip()]
+            whitelist = [name.strip() for name in whitelist if name.strip()]
 
             blacklist_names = {
                 self.__normalize_name(name)
@@ -126,19 +131,44 @@ class TPA:
                 "whitelist": filtered_whitelist
             }
 
-        if migrated:
-            self.__write_tpa_setting_data(data)
+        return data, migrated
 
-        return data
+    def __report_storage_error(self, operation: str, error: Exception) -> None:
+        self.main.logger.error(
+            f"Cannot {operation} TPA settings {self.__tpa_setting_file_path}: {error}. "
+            "TPA requests and settings are disabled; existing settings were not "
+            "overwritten. Repair the file or restore a known-good copy, check "
+            "file/directory permissions, then restart the server."
+        )
 
-    def __write_tpa_setting_data(self, data: dict) -> None:
-        with open(self.__tpa_setting_file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+    def __write_tpa_setting_data(self, data: dict) -> bool:
+        try:
+            atomic_write_json(self.__tpa_setting_file_path, data)
+        except (OSError, ValueError, TypeError) as error:
+            self.__report_storage_error("save", error)
+            return False
+        return True
 
-    def __save_tpa_setting_data(self) -> None:
-        self.__write_tpa_setting_data(self.__tpa_setting_data)
+    def __save_tpa_setting_data(self) -> bool:
+        if self.__tpa_setting_data is None:
+            return False
+        if not self.__write_tpa_setting_data(self.__tpa_setting_data):
+            # Never keep serving unsaved edits or overwrite a failed-load fallback.
+            self.__tpa_setting_data = None
+            return False
+        return True
 
-    def __get_settings(self, player_name: str) -> dict:
+    def __check_available(self, player: Player) -> bool:
+        if self.__tpa_setting_data is not None:
+            return True
+        player.send_message(
+            f"{ColorFormat.RED}{self.__text(player, 'settings_unavailable')}"
+        )
+        return False
+
+    def __get_settings(self, player_name: str) -> dict | None:
+        if self.__tpa_setting_data is None:
+            return None
         settings = self.__tpa_setting_data.get(player_name)
 
         if not isinstance(settings, dict):
@@ -167,7 +197,7 @@ class TPA:
 
     @event_handler
     def on_player_join(self, e: PlayerJoinEvent) -> None:
-        if self.__player_xuid(e.player) is None:
+        if self.__player_xuid(e.player) is None or self.__tpa_setting_data is None:
             return
 
         if self.__tpa_setting_data.get(e.player.name) is None:
@@ -178,6 +208,8 @@ class TPA:
         self.__send_request(player)
 
     def settings_main(self, player: Player) -> None:
+        if not self.__check_available(player):
+            return
         settings = self.__get_settings(player.name)
 
         settings_form = ActionForm(
@@ -226,6 +258,8 @@ class TPA:
         player.send_form(settings_form)
 
     def __toggle_requests(self, player: Player) -> None:
+        if not self.__check_available(player):
+            return
         settings = self.__get_settings(player.name)
         settings["enabled"] = not settings["enabled"]
         self.__save_tpa_setting_data()
@@ -233,6 +267,8 @@ class TPA:
 
     def __manage_list(self, list_name: str):
         def on_click(player: Player) -> None:
+            if not self.__check_available(player):
+                return
             settings = self.__get_settings(player.name)
             entries = sorted(
                 settings[list_name],
@@ -282,6 +318,8 @@ class TPA:
 
     def __add_online_player(self, list_name: str):
         def on_click(player: Player) -> None:
+            if not self.__check_available(player):
+                return
             settings = self.__get_settings(player.name)
             existing_names = {
                 self.__normalize_name(name)
@@ -339,6 +377,8 @@ class TPA:
 
     def __add_offline_player(self, list_name: str):
         def on_click(player: Player) -> None:
+            if not self.__check_available(player):
+                return
             name_input = TextInput(
                 label=self.__text(player, "offline_name_label"),
                 placeholder=self.__text(player, "offline_name_placeholder")
@@ -369,8 +409,8 @@ class TPA:
                     self.__send_error(p)
                     return
 
-                self.__add_name_to_list(p, list_name, target_name)
-                self.__manage_list(list_name)(p)
+                if self.__add_name_to_list(p, list_name, target_name):
+                    self.__manage_list(list_name)(p)
 
             form.on_submit = on_submit
             player.send_form(form)
@@ -379,8 +419,8 @@ class TPA:
 
     def __add_list_entry(self, list_name: str, target_name: str):
         def on_click(player: Player) -> None:
-            self.__add_name_to_list(player, list_name, target_name)
-            self.__manage_list(list_name)(player)
+            if self.__add_name_to_list(player, list_name, target_name):
+                self.__manage_list(list_name)(player)
 
         return on_click
 
@@ -389,7 +429,9 @@ class TPA:
         player: Player,
         list_name: str,
         target_name: str
-    ) -> None:
+    ) -> bool:
+        if not self.__check_available(player):
+            return False
         settings = self.__get_settings(player.name)
         other_list_name = (
             "whitelist"
@@ -410,10 +452,15 @@ class TPA:
         ):
             settings[list_name].append(target_name)
 
-        self.__save_tpa_setting_data()
+        if not self.__save_tpa_setting_data():
+            self.__check_available(player)
+            return False
+        return True
 
     def __remove_list_entry(self, list_name: str, target_name: str):
         def on_click(player: Player) -> None:
+            if not self.__check_available(player):
+                return
             settings = self.__get_settings(player.name)
             normalized_target = self.__normalize_name(target_name)
 
@@ -429,6 +476,8 @@ class TPA:
         return on_click
 
     def __send_request(self, player: Player) -> None:
+        if not self.__check_available(player):
+            return
         sender_xuid = self.__player_xuid(player)
         if sender_xuid is None:
             return
@@ -499,6 +548,8 @@ class TPA:
         )
 
         def on_submit(p: Player, json_str: str) -> None:
+            if not self.__check_available(p):
+                return
             try:
                 data = json.loads(json_str)
                 acceptor_name, acceptor_xuid = player_targets[int(data[0])]
@@ -597,7 +648,7 @@ class TPA:
     ) -> bool:
         settings = self.__get_settings(acceptor_name)
 
-        if not settings["enabled"]:
+        if settings is None or not settings["enabled"]:
             return False
 
         normalized_sender = self.__normalize_name(sender_name)
@@ -613,6 +664,8 @@ class TPA:
         acceptor_name: str
     ) -> bool:
         settings = self.__get_settings(acceptor_name)
+        if settings is None:
+            return False
         normalized_sender = self.__normalize_name(sender_name)
 
         return any(
@@ -655,6 +708,8 @@ class TPA:
         selection: str
     ):
         def on_click(player: Player) -> None:
+            if not self.__check_available(player):
+                return
             sender = self.__get_real_player(sender_name, sender_xuid)
 
             if selection == "accept":
@@ -735,6 +790,7 @@ class TPA:
                 "busy": "{0} 请求失败：玩家 {1} 当前忙碌。",
                 "sender_offline": "玩家 {0} 已离线，请求无法接受。",
                 "denied": "玩家 {0} 拒绝了你的 {1} 请求。",
+                "settings_unavailable": "请求传送设置不可用。请联系管理员检查日志、修复设置文件或权限后重启服务器。",
                 "error": "表单解析错误，请重新操作。"
             }
         else:
@@ -777,6 +833,7 @@ class TPA:
                 "busy": "{0} request failed: player {1} is busy.",
                 "sender_offline": "Player {0} is offline; the request cannot be accepted.",
                 "denied": "Player {0} denied your {1} request.",
+                "settings_unavailable": "Teleport request settings are unavailable. Ask an administrator to check the logs, repair the settings file or permissions, then restart the server.",
                 "error": "Failed to parse the form. Please try again."
             }
 
