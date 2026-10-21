@@ -106,25 +106,17 @@ jobs:
     name: Create GitHub Release
     needs: wheel
     runs-on: ubuntu-latest
-    # The master-push exception publishes only the explicitly requested post5 release.
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-       github.event.before == '529d8f815a8a883892372592d164d5a3006e9052' &&
-       github.event.head_commit.message == 'release: support Python 3.11-3.15 (260123.post5)')
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
 
       - name: Verify release target
         id: release-target
         env:
           RELEASE_SHA: ${{ github.sha }}
-          REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         shell: python
         run: |
@@ -137,11 +129,6 @@ jobs:
           assert subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == sha
           project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
           tag = os.environ["REF_NAME"]
-          if os.environ["REF_TYPE"] != "tag":
-              assert project["version"] == "260123.post5", project["version"]
-              previous = subprocess.check_output(["git", "show", f"{sha}^:pyproject.toml"], text=True)
-              assert tomllib.loads(previous)["project"]["version"] == "260123.post4"
-              tag = "v260123.post5"
           assert tag == f"v{project['version']}", (tag, project["version"])
           refs = subprocess.check_output(
               ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
