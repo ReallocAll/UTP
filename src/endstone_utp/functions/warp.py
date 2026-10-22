@@ -1,6 +1,10 @@
 import os
 import json
 import math
+from copy import deepcopy
+
+from endstone_utp.storage import atomic_write_json
+from endstone_utp.destinations import load_destinations, guard_callback
 
 from endstone import ColorFormat, Player
 from endstone.level import Location
@@ -12,28 +16,33 @@ class Warp:
         self.main = main
 
         self.__warp_data_file_path = os.path.join(self.main.first_dir_path, "warp.json")
-        self.__warp_data = self.__load_warp_data()
+        self.__warp_data, self._content = load_destinations(self.__warp_data_file_path, homes=False)
+        self._revision = 0
 
         self.lang_funct = main.lang_funct
 
-    def __load_warp_data(self) -> dict:
-        if not os.path.exists(self.__warp_data_file_path):
-            with open(self.__warp_data_file_path, "w", encoding="utf-8") as f:
-                warp_data = {}
-                json_str = json.dumps(warp_data, indent=4, ensure_ascii=False)
-                f.write(json_str)
-        else:
-            with open(self.__warp_data_file_path, "r", encoding="utf-8") as f:
-                warp_data: dict = json.loads(f.read())
+    def _allowed(self, player, *, admin=False):
+        if not self.main.is_enabled or getattr(self.main, "warp_funct", self) is not self:
+            return False
+        enabled = self.main.config_funct.config_data.get("is_enabled", {}).get("warp", True)
+        return enabled and player.has_permission("Main.command.utp") and (not admin or player.is_op)
 
-        return warp_data
-
-    def __save_warp_data(self) -> None:
-        with open(self.__warp_data_file_path, "w+", encoding="utf-8") as f:
-            json_str = json.dumps(self.__warp_data, indent=4, ensure_ascii=False)
-            f.write(json_str)
+    def __save_warp_data(self, candidate, player=None) -> bool:
+        try:
+            content = atomic_write_json(self.__warp_data_file_path, candidate, expected_content=self._content)
+        except (OSError, ValueError, TypeError) as exc:
+            self.main.logger.error(f"Unable to save warp destinations: {exc}")
+            if player is not None:
+                player.send_message("保存失败，原有数据未更改。请联系管理员。")
+            return False
+        self.__warp_data = candidate
+        self._content = content
+        self._revision += 1
+        return True
 
     def warp_main(self, player: Player) -> None:
+        if not self._allowed(player):
+            return
         warp_form = ActionForm(
             title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
                   f"{self.lang_funct.get_text(player, 'warp_form.title')}",
@@ -70,6 +79,8 @@ class Warp:
         player.send_form(warp_form)
 
     def __add_warp(self, player: Player) -> None:
+        if not self._allowed(player, admin=True):
+            return
         dim = player.dimension.name
 
         loc = [
@@ -129,19 +140,17 @@ class Warp:
 
                 return
 
-            self.__warp_data[warp_name] = {
-                "dim": dim,
-                "loc": loc
-            }
-
-            self.__save_warp_data()
+            candidate = deepcopy(self.__warp_data)
+            candidate[warp_name] = {"dim": dim, "loc": loc}
+            if not self.__save_warp_data(candidate, p):
+                return
 
             p.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(p, 'add_warp.message.success')}"
             )
 
-        add_warp_form.on_submit = on_submit
+        add_warp_form.on_submit = guard_callback(self, on_submit, admin=True, player=player)
 
         player.send_form(add_warp_form)
 
@@ -188,7 +197,7 @@ class Warp:
 
             player.send_form(warp_info_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __warp_teleport(self, warp_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -201,14 +210,16 @@ class Warp:
                 z=float(loc[2])
             )
 
-            player.teleport(target_loc)
+            if player.teleport(target_loc) is False:
+                player.send_message("传送被取消。")
+                return
 
             player.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(player, 'warp_teleport.message.success').format(warp_name)}"
             )
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __edit_warp(self, warp_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -243,7 +254,7 @@ class Warp:
 
             player.send_form(edit_warp_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)
 
     def __update_warp(self, warp_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -279,7 +290,7 @@ class Warp:
 
             player.send_form(update_warp_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)
 
     def __update_warp_name(self, warp_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -330,25 +341,21 @@ class Warp:
 
                     return
 
-                self.__warp_data.pop(warp_name)
-
-                self.__warp_data[new_warp_name] = {
-                    "dim": dim,
-                    "loc": loc
-                }
-
-                self.__save_warp_data()
+                candidate = deepcopy(self.__warp_data)
+                candidate[new_warp_name] = candidate.pop(warp_name)
+                if not self.__save_warp_data(candidate, p):
+                    return
 
                 p.send_message(
                     f"{ColorFormat.YELLOW}"
                     f"{self.lang_funct.get_text(p, 'update_warp_name.message.success').format(warp_name, new_warp_name)}"
                 )
 
-            update_warp_name_form.on_submit = on_submit
+            update_warp_name_form.on_submit = guard_callback(self, on_submit, admin=True, player=player)
 
             player.send_form(update_warp_name_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)
 
     def __update_warp_loc(self, warp_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -392,20 +399,21 @@ class Warp:
 
             player.send_form(update_warp_loc_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)
 
     def __update_warp_loc_c(self, warp_name: str, new_loc: list):
         def on_click(player: Player) -> None:
-            self.__warp_data[warp_name]["loc"] = new_loc
-
-            self.__save_warp_data()
+            candidate = deepcopy(self.__warp_data)
+            candidate[warp_name]["loc"] = new_loc
+            if not self.__save_warp_data(candidate, player):
+                return
 
             player.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(player, 'update_warp_loc.message.success').format(warp_name)}"
             )
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)
 
     def __delete_warp(self, warp_name, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -433,17 +441,18 @@ class Warp:
 
             player.send_form(delete_warp_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)
 
     def __delete_warp_c(self, warp_name: str):
         def on_click(player: Player) -> None:
-            self.__warp_data.pop(warp_name)
+            candidate = deepcopy(self.__warp_data)
+            candidate.pop(warp_name)
+            if not self.__save_warp_data(candidate, player):
+                return
 
-            self.__save_warp_data()
-
-            player.send_form(
+            player.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(player, 'delete_warp.message.success').format(warp_name)}"
             )
 
-        return on_click
+        return guard_callback(self, on_click, admin=True)

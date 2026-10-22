@@ -25,6 +25,8 @@ class Player:
         self.location = SimpleNamespace(dimension=SimpleNamespace(name="Overworld"), x=1, y=64, z=2)
 
     def has_permission(self, permission):
+        if permission == "Main.command.utp":
+            return getattr(self, "command_allowed", True)
         return self.admin
 
     def send_form(self, form):
@@ -49,7 +51,7 @@ class Lang:
 
 def make_main(directory):
     return SimpleNamespace(
-        first_dir_path=str(directory), lang_funct=Lang(), logger=Logger(),
+        first_dir_path=str(directory), lang_funct=Lang(), logger=Logger(), is_enabled=True,
         back_to_main_form=lambda player: None,
         tpa_funct=SimpleNamespace(button_text=lambda player: "Teleport Request"),
         server=SimpleNamespace(online_players=[], get_player=lambda name: None),

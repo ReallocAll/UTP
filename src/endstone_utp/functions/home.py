@@ -1,6 +1,10 @@
 import os
 import json
 import math
+from copy import deepcopy
+
+from endstone_utp.storage import atomic_write_json
+from endstone_utp.destinations import load_destinations, guard_callback
 
 from endstone import ColorFormat, Player
 from endstone.level import Location
@@ -13,36 +17,41 @@ class Home:
         self.main = main
 
         self.__home_data_file_path = os.path.join(self.main.first_dir_path, "home.json")
-        self.__home_data = self.__load_home_data()
+        self.__home_data, self._content = load_destinations(self.__home_data_file_path, homes=True)
+        self._revision = 0
 
         self.lang_funct = main.lang_funct
         self.config_funct = main.config_funct
 
-    def __load_home_data(self) -> dict:
-        if not os.path.exists(self.__home_data_file_path):
-            with open(self.__home_data_file_path, "w", encoding="utf-8") as f:
-                home_data = {}
-                json_str = json.dumps(home_data, indent=4, ensure_ascii=False)
-                f.write(json_str)
-        else:
-            with open(self.__home_data_file_path, "r", encoding="utf-8") as f:
-                home_data: dict = json.loads(f.read())
+    def _allowed(self, player, *, admin=False):
+        if not self.main.is_enabled or getattr(self.main, "home_funct", self) is not self:
+            return False
+        enabled = self.main.config_funct.config_data.get("is_enabled", {}).get("home", True)
+        return enabled and player.has_permission("Main.command.utp") and (not admin or player.is_op)
 
-        return home_data
-
-    def __save_home_data(self) -> None:
-        with open(self.__home_data_file_path, "w+", encoding="utf-8") as f:
-            json_str = json.dumps(self.__home_data, indent=4, ensure_ascii=False)
-            f.write(json_str)
+    def __save_home_data(self, candidate, player=None) -> bool:
+        try:
+            content = atomic_write_json(self.__home_data_file_path, candidate, expected_content=self._content)
+        except (OSError, ValueError, TypeError) as exc:
+            self.main.logger.error(f"Unable to save home destinations: {exc}")
+            if player is not None:
+                player.send_message("保存失败，原有数据未更改。请联系管理员。")
+            return False
+        self.__home_data = candidate
+        self._content = content
+        self._revision += 1
+        return True
 
     @event_handler
     def __on_player_join(self, e: PlayerJoinEvent) -> None:
         if self.__home_data.get(e.player.name) is None:
-            self.__home_data[e.player.name] = {}
-
-            self.__save_home_data()
+            candidate = deepcopy(self.__home_data)
+            candidate[e.player.name] = {}
+            self.__save_home_data(candidate, e.player)
 
     def home_main(self, player: Player) -> None:
+        if not self._allowed(player):
+            return
         home_form = ActionForm(
             title=f"{ColorFormat.BOLD}{ColorFormat.LIGHT_PURPLE}"
                   f"{self.lang_funct.get_text(player, 'home_form.title')}",
@@ -58,7 +67,7 @@ class Home:
             on_click=self.__add_home
         )
 
-        for key, value in self.__home_data[player.name].items():
+        for key, value in self.__home_data.get(player.name, {}).items():
             dim: str = value["dim"]
             loc: list = value["loc"]
 
@@ -78,7 +87,7 @@ class Home:
         player.send_form(home_form)
 
     def __can_add_home(self, player: Player) -> bool:
-        home_count = len(self.__home_data[player.name])
+        home_count = len(self.__home_data.get(player.name, {}))
 
         if home_count >= self.config_funct.config_data["max_home"]:
             player.send_message(
@@ -92,6 +101,8 @@ class Home:
         return True
 
     def __add_home(self, player: Player) -> None:
+        if not self._allowed(player, admin=False):
+            return
         if not self.__can_add_home(player):
             return
 
@@ -146,7 +157,7 @@ class Home:
 
                 return
 
-            if self.__home_data[p.name].get(home_name) is not None:
+            if self.__home_data.get(p.name, {}).get(home_name) is not None:
                 p.send_message(
                     f"{ColorFormat.RED}"
                     f"[{self.lang_funct.get_text(p, 'add_home.message.fail')}] "
@@ -156,19 +167,17 @@ class Home:
 
                 return
 
-            self.__home_data[p.name][home_name] = {
-                "dim": dim,
-                "loc": loc
-            }
-
-            self.__save_home_data()
+            candidate = deepcopy(self.__home_data)
+            candidate.setdefault(p.name, {})[home_name] = {"dim": dim, "loc": loc}
+            if not self.__save_home_data(candidate, p):
+                return
 
             p.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(p, 'add_home.message.success')}"
             )
 
-        add_home_form.on_submit = on_submit
+        add_home_form.on_submit = guard_callback(self, on_submit, admin=False, player=player)
 
         player.send_form(add_home_form)
 
@@ -214,7 +223,7 @@ class Home:
 
             player.send_form(home_info_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __home_teleport(self, home_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -227,14 +236,16 @@ class Home:
                 z=float(loc[2])
             )
 
-            player.teleport(target_loc)
+            if player.teleport(target_loc) is False:
+                player.send_message("传送被取消。")
+                return
 
             player.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(player, 'home_teleport.message.success').format(home_name)}"
             )
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __edit_home(self, home_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -269,7 +280,7 @@ class Home:
 
             player.send_form(edit_home_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __update_home(self, home_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -304,7 +315,7 @@ class Home:
 
             player.send_form(update_home_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __update_home_name(self, home_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -356,25 +367,21 @@ class Home:
 
                     return
 
-                self.__home_data[p.name].pop(home_name)
-
-                self.__home_data[p.name][new_home_name] = {
-                    "dim": dim,
-                    "loc": loc
-                }
-
-                self.__save_home_data()
+                candidate = deepcopy(self.__home_data)
+                candidate[p.name][new_home_name] = candidate[p.name].pop(home_name)
+                if not self.__save_home_data(candidate, p):
+                    return
 
                 p.send_message(
                     f"{ColorFormat.YELLOW}"
                     f"{self.lang_funct.get_text(p, 'update_home_name.message.success').format(home_name, new_home_name)}"
                 )
 
-            update_home_name_form.on_submit = on_submit
+            update_home_name_form.on_submit = guard_callback(self, on_submit, admin=False, player=player)
 
             player.send_form(update_home_name_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __update_home_loc(self, home_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -418,20 +425,21 @@ class Home:
 
             player.send_form(update_home_loc_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __update_home_loc_c(self, home_name: str, new_loc: list):
         def on_click(player: Player) -> None:
-            self.__home_data[player.name][home_name]["loc"] = new_loc
-
-            self.__save_home_data()
+            candidate = deepcopy(self.__home_data)
+            candidate[player.name][home_name]["loc"] = new_loc
+            if not self.__save_home_data(candidate, player):
+                return
 
             player.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(player, 'update_home_loc.message.success').format(home_name)}"
             )
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __delete_home(self, home_name: str, dim: str, loc: list):
         def on_click(player: Player) -> None:
@@ -459,17 +467,18 @@ class Home:
 
             player.send_form(delete_home_form)
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)
 
     def __delete_home_c(self, home_name: str):
         def on_click(player: Player) -> None:
-            self.__home_data[player.name].pop(home_name)
-
-            self.__save_home_data()
+            candidate = deepcopy(self.__home_data)
+            candidate[player.name].pop(home_name)
+            if not self.__save_home_data(candidate, player):
+                return
 
             player.send_message(
                 f"{ColorFormat.YELLOW}"
                 f"{self.lang_funct.get_text(player, 'delete_home.message.success').format(home_name)}"
             )
 
-        return on_click
+        return guard_callback(self, on_click, admin=False)

@@ -188,3 +188,18 @@ python -m compileall -q src/endstone_utp tests
 ```
 
 These tests use lightweight Endstone form/player doubles and real temporary JSON files. They cover configuration permissions, validation, reload/write conflicts and failures, TPA data preservation/migration, and home limits. They do not replace a smoke test on a real Endstone server.
+
+### Destination persistence and outstanding forms
+
+Home and Warp edits now stage a complete candidate, atomically replace the JSON
+file, and only then publish memory and success. A failed write preserves the
+previous state. Invalid existing destination data fails loading without resetting
+the file; repair it from a trusted backup before loading again. External edits
+are detected at save time and require a plugin reload before further edits.
+
+Any successful write to a destination file invalidates outstanding forms for that
+feature, including same-name deletion/recreation. Reopen the menu after another
+edit. Warp edits recheck current operator status, and Home/Warp callbacks recheck
+the feature switch. Existing name-based JSON layouts are retained; this change
+does not guess an account-name migration. File replacement protects ordinary
+write failures, not arbitrary power-loss durability or concurrent external writers.
